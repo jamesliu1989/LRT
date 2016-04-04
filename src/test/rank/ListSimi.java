@@ -16,17 +16,18 @@ public class ListSimi {
 	
 	private static double[] weight = new double[DIMENSION];           //特征权重
 	
-	private static int nIteration = 6000;                             //迭代次数
+	private static int nIteration = 500;                             //迭代次数
 	
 	private static double learningRate = 0.0025;                      //学习步长
 		
 	private static List<Docs_of_query> samples = new ArrayList<Docs_of_query>();    //样本数据
 	
 	//相似度打分部分参数
-	private static double u = 0.03;                                  //相关度打分权重
+	private static double u = 0.5;                                  //相关度打分权重
 	
 	//相似性矩阵，按query
 	public static List<double[][]> simiScoreList = new ArrayList<double[][]>();
+	public static List<double[][]> simiScoreList2 = new ArrayList<double[][]>();
 	
 	//查询q的所以样本数据
 	static class Docs_of_query{	
@@ -113,7 +114,8 @@ public class ListSimi {
         		Docs_of_query docs_of_query = samples.get(i);      //该query返回的所有文档
         		int doc_num_of_i = docs_of_query.docs.size();
         		double[][] simi_of_query = simiScoreList.get(i);   //该查询对应文档之间的相似度
-       		 
+        		double[][] simi_of_query2 = simiScoreList2.get(i);   //该查询对应文档之间的规则化相似度
+        		
         		double score[] = new double[doc_num_of_i];
 
         		double[] labelExp = new double[doc_num_of_i];
@@ -135,7 +137,7 @@ public class ListSimi {
         		 * 利用相似性矩阵重新计算得分
         		 *  score[j] = uΣscore[j2] * R[j][j2];
         		 */
-        		score = reScore(simi_of_query, score);
+        		score = reScore(simi_of_query, simi_of_query2, score);
         		
         		//top-1 概率
         		for (int j = 0; j < doc_num_of_i; j++) {
@@ -159,7 +161,7 @@ public class ListSimi {
             			double weight_simi = 0.0;
 						for (int j1 = 0; j1 < doc_num_of_i; j1++) {
 							if (j != j1) {
-								weight_simi += docs_of_query.docs.get(j1).features[k] * simi_of_query[j][j1];
+								weight_simi += docs_of_query.docs.get(j1).features[k] * simi_of_query[j][j1] * simi_of_query2[j][j1];
 							}           				
             			}
 						feature = feature + u * weight_simi;
@@ -314,19 +316,25 @@ public class ListSimi {
 				}
 				reader.readLine();   //跳过空行
 				simiScoreList.add(docSimis);
-				
-/*				for (int j = 0; j < docSimis.length; j++) {
-					for (int j2 = 0; j2 < docSimis[0].length; j2++) {
-						if(docSimis[j][j2] == 0)
-							System.err.print("0.000000");
-						else
-						   System.err.print(docSimis[j][j2]);
-						System.err.print(" ");
-					}
-					System.err.println("");
-				}
-				break;*/
 			}
+			
+			//计算规则化相似性矩阵
+			for (double[][] docSimis : simiScoreList) {
+				double[][] docSimis2 = new double[docSimis.length][docSimis.length];
+				for (int j1 = 0; j1 < docSimis2.length; j1++) {
+					double sum = 0.0;
+					for (int j2 = 0; j2 < docSimis2[j1].length; j2++) {
+						sum += docSimis[j1][j2];
+					}
+					
+					for (int j2 = 0; j2 < docSimis2[j1].length; j2++) {
+						docSimis2[j1][j2] = docSimis[j1][j2] / sum;
+					}					
+				}
+				simiScoreList2.add(docSimis2);
+			}
+			//end计算规则化相似性矩阵
+			
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
 		} catch (IOException e) {
@@ -350,12 +358,12 @@ public class ListSimi {
 	 * @param oldScore
 	 * @return
 	 */
-	public static double[] reScore(double[][] simi_of_query, double oldScore[]){
+	public static double[] reScore(double[][] simi_of_query, double[][] simi_of_query2, double oldScore[]){
 		double newSocre[] = new double[oldScore.length];
 		for (int j = 0; j < simi_of_query.length; j++) {
 			for (int j2 = 0; j2 < simi_of_query.length; j2++) {
 				if(j != j2){
-					newSocre[j] += oldScore[j2] * simi_of_query[j][j2];
+					newSocre[j] += oldScore[j2] * simi_of_query[j][j2] * simi_of_query2[j][j2];
 				}
 			}
 			newSocre[j] = oldScore[j] + u * newSocre[j];
